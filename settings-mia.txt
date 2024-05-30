@@ -1,0 +1,8 @@
+
+opt/conda/miniconda3/condabin/conda init
+
+conda create -yn mia python=3.8
+conda activate mia
+
+
+sudo apt install 
