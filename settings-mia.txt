@@ -1,8 +1,53 @@
 
 opt/conda/miniconda3/condabin/conda init
 
-conda create -yn mia python=3.8
+conda create -yn mia python=3.9
 conda activate mia
+
+python3 -m venv
 
 
 sudo apt install 
+
+
+python train.py --dataroot ./datasets/pepperbell_healthy_to_bacterialspot --name maps_cyclegan --model cycle_gan
+
+
+python train.py --dataroot ./datasets/pepperbell_healthy_to_bacterialspot --name healthy2bacterialspot_leafGAN --model leaf_gan --dataset_mode unaligned_masked
+
+
+
+python main.py --dataset plantvillage --gan_type CGAN --epoch 100 --batch_size 64 --input_size 64 --class_num 15
+
+
+python train.py --dataroot /home/mia/Downloads/DATA/PlantVillage/train/ --name cgan --model cgan --model_mode 2 --epoch_count 100 --batch_size 64 --input_size 64 --class_num 15 --name plantvillage
+
+python evaluations/inception.py
+
+python run.py -c configs/cvae.yaml
+
+./main.py --train --dataset cifar10
+
+
+
+
+
+python main.py --dataset cifar-10 --gan_type VAE --epoch 10 --batch_size 64 --input_size 64 --class_num 15
+
+
+CGAN - 256x256 Only for 64
+
+ File "/home/mia/Downloads/pytorch-generative-model-collections-master/CGAN.py", line 174, in train
+    D_loss.backward()
+  File "/home/mia/.conda/envs/mia/lib/python3.12/site-packages/torch/_tensor.py", line 525, in backward
+    torch.autograd.backward(
+  File "/home/mia/.conda/envs/mia/lib/python3.12/site-packages/torch/autograd/__init__.py", line 267, in backward
+    _engine_run_backward(
+  File "/home/mia/.conda/envs/mia/lib/python3.12/site-packages/torch/autograd/graph.py", line 744, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB. GPU 
+
+
+
+

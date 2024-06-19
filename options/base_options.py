@@ -20,7 +20,8 @@ class BaseOptions():
     def initialize(self, parser):
         """Define the common options that are used in both training and test."""
         # basic parameters
-        parser.add_argument('--dataroot', required=True, help='path to images (should have subfolders trainA, trainB, valA, valB, etc)')
+        parser.add_argument('--model_mode', required=True, help='1: Image-to-image translation model mode, 2: Other GAN models mode')
+        parser.add_argument('--dataroot', required=True, help='path to images (should have subfolders trainA, trainB, valA, valB, etc for model_mode 1)')
         parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment. It decides where to store samples and models')
         parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
@@ -55,6 +56,18 @@ class BaseOptions():
         parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')
         parser.add_argument('--suffix', default='', type=str, help='customized suffix: opt.name = opt.name + suffix: e.g., {model}_{netG}_size{load_size}')
 
+        # other GAN models parameters
+        parser.add_argument('--input_size', type=int, default=28, help='The size of input image')
+        parser.add_argument('--class_num', type=int, default=10, help='The number of classes in the dataset')
+        parser.add_argument('--lrG', type=float, default=0.0002)
+        parser.add_argument('--lrD', type=float, default=0.0002)
+        # parser.add_argument('--beta1', type=float, default=0.5)
+        parser.add_argument('--beta2', type=float, default=0.999)
+        parser.add_argument('--gpu_mode', type=bool, default=True)
+        # parser.add_argument('--save_dir', type=str, default='models',
+        #                 help='Directory name to save the model')
+        parser.add_argument('--result_dir', type=str, default='results', help='Directory name to save the generated images')
+        parser.add_argument('--log_dir', type=str, default='logs', help='Directory name to save training logs')
         self.initialized = True
         return parser
 
