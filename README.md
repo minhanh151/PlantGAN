@@ -47,12 +47,11 @@ python test.py --dataroot /path/to/healthy2brownspot --name healthy2brownspot_cy
 
 ```
 @article{cap2020leafGAN,
-  title   = {LeafGAN: An Effective Data Augmentation Method for Practical Plant Disease Diagnosis},
-  year    = {2020},
-  doi     = {10.1109/TASE.2020.3041499}
+  title   = {PlantGAN: An Effective Data Augmentation Method for Practical Plant Disease Diagnosis},
+  year    = {2024}
 }
 ```
 
 ## Acknowledgments
-Our code is inspired by [pytorch-CycleGAN](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix).
+Our code is inspired by [pytorch-CycleGAN](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) and [pytorch-LeafGAN].
 
