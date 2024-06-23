@@ -5,7 +5,7 @@ from torch.nn import functional as F
 import torch.utils.data
 
 from torchvision.models.inception import inception_v3
-
+from torchmetrics.image.fid import FrechetInceptionDistance
 import numpy as np
 from scipy.stats import entropy
 
@@ -66,6 +66,25 @@ def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
         split_scores.append(np.exp(np.mean(scores)))
 
     return np.mean(split_scores), np.std(split_scores)
+
+
+def cal_FID(real_dataset, fake_dataset, num_feature=2048):
+    real_data_loader = torch.utils.data.DataLoader(real_dataset, batch_size=32)
+    generated_data_loader = torch.utils.data.DataLoader(fake_dataset, batch_size=32)
+
+    # 2. Calculate FID Score
+    fid = FrechetInceptionDistance(feature=num_feature).cuda()  # Use 2048 features (default)
+
+    for real_images in real_data_loader:
+        fid.update(real_images.type(torch.uint8).cuda(), real=True)  # Update with real images
+
+    for generated_images in generated_data_loader:
+        fid.update(generated_images.type(torch.uint8).cuda(), real=False)  # Update with generated images
+
+    fid_score = fid.compute()
+    return fid_score
+    # print(f"FID score: {fid_score}")
+
 
 if __name__ == '__main__':
     class IgnoreLabelDataset(torch.utils.data.Dataset):
