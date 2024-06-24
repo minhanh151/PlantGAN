@@ -6,10 +6,9 @@ import util.utils as utils
 def gen_image(model, opt, device) -> None:
     
     os.makedirs(opt.path_save, exist_ok=True)
-    num_iter = opt.nimage // opt.batch + 1
-
+    nimage = opt.niter * opt.batch
     
-    for j in range(0, num_iter, opt.batch):
+    for j in range(0, nimage, opt.batch):
         sample_y_ = torch.zeros(opt.batch, opt.classes).scatter_(1, torch.randint(0, opt.classes - 1, (opt.batch,  1)).type(torch.LongTensor), 1) #ONE HOT ENCODING 
         sample_z_ = torch.rand((opt.batch, opt.zdim_in))
         sample_z_, sample_y_ = sample_z_.to(device), sample_y_.to(device)
@@ -21,5 +20,3 @@ def gen_image(model, opt, device) -> None:
         for i, sample in enumerate(samples):
             utils.save_images(sample[np.newaxis, ...], [1, 1],
                             f'{opt.path_save}/test_{j+i}.png')
-
-

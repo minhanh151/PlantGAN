@@ -68,47 +68,82 @@ def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
     return np.mean(split_scores), np.std(split_scores)
 
 
-def cal_FID(real_dataset, fake_dataset, num_feature=2048):
-    real_data_loader = torch.utils.data.DataLoader(real_dataset, batch_size=32)
-    generated_data_loader = torch.utils.data.DataLoader(fake_dataset, batch_size=32)
+def fid_score(real_dataset, fake_dataset, device, batch_size=32, num_feature=2048):
+    # create data loader
+    real_data_loader = torch.utils.data.DataLoader(real_dataset, batch_size=batch_size)
+    generated_data_loader = torch.utils.data.DataLoader(fake_dataset, batch_size=batch_size)
 
-    # 2. Calculate FID Score
-    fid = FrechetInceptionDistance(feature=num_feature).cuda()  # Use 2048 features (default)
+    # Calculate FID Score
+    fid = FrechetInceptionDistance(feature=num_feature).to(device)  # Use 2048 features (default)
 
     for real_images in real_data_loader:
-        fid.update(real_images.type(torch.uint8).cuda(), real=True)  # Update with real images
+        fid.update(real_images.type(torch.uint8).to(device), real=True)  # Update with real images
 
     for generated_images in generated_data_loader:
-        fid.update(generated_images.type(torch.uint8).cuda(), real=False)  # Update with generated images
+        fid.update(generated_images.type(torch.uint8).to(device), real=False)  # Update with generated images
 
     fid_score = fid.compute()
     return fid_score
-    # print(f"FID score: {fid_score}")
 
 
 if __name__ == '__main__':
-    class IgnoreLabelDataset(torch.utils.data.Dataset):
-        def __init__(self, orig):
-            self.orig = orig
-
-        def __getitem__(self, index):
-            return self.orig[index][0]
-
-        def __len__(self):
-            return len(self.orig)
-
-    import torchvision.datasets as dset
     import torchvision.transforms as transforms
+    from PIL import Image 
+    import os
+    class IgnoreLabelDataset(torch.utils.data.Dataset):
+        def __init__(self, dataset_path, transform=transforms.Compose([
+                                    transforms.Resize(32),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                ])):
+            list_img_name = os.listdir(dataset_path)
+            self.list_img = [f'{dataset_path}/{img}' for img in list_img_name]
+            self.transform = transform
+            
+        def __getitem__(self, index):
+            img_path = self.list_img[index]
+            img = Image.open(img_path)
+            # img = cv2.resize(img, (32,32))
+            
+            if self.transform:
+                img = self.transform(img)
+            
+            return img
+        def __len__(self):
+            return len(self.list_img)
+    
+    class TrueDataset(torch.utils.data.Dataset):
+        def __init__(self, dataset_path, transform=transforms.Compose([
+                                    transforms.Resize(32),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                ])):
+            self.list_img = []
+            image_extensions = {".jpg", ".jpeg", ".png"}
+            for root, dirs, files in os.walk(dataset_path):
+                for file in files:
+                    
+                    if 'healthy' in root.split('/')[-1]:
+                        continue
+                    
+                    if os.path.splitext(file)[1].lower() in image_extensions:
+                        self.list_img.append(os.path.join(root, file))
 
-    cifar = dset.CIFAR10(root='datasets/', download=True,
-                             transform=transforms.Compose([
-                                 transforms.Resize(32),
-                                 transforms.ToTensor(),
-                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                             ])
-    )
-
-    IgnoreLabelDataset(cifar)
-
-    print ("Calculating Inception Score...")
-    print (inception_score(IgnoreLabelDataset(cifar), cuda=True, batch_size=32, resize=True, splits=10))
+            self.transform = transform
+            
+        def __getitem__(self, index):
+            img_path = self.list_img[index]
+            img = Image.open(img_path)
+            if self.transform:
+                img = self.transform(img)
+            
+            return img
+        def __len__(self):
+            return len(self.list_img)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    fake_dataset = IgnoreLabelDataset(dataset_path='/storage/anhnn99/projects/Image-Generation-with-VAE/PlantGAN/results/test')
+    true_dataset = TrueDataset(dataset_path='/storage/anhnn99/dataset/PlantVillage')
+    
+    print(inception_score(fake_dataset, cuda=True, batch_size=32, resize=True, splits=10))
+    print(fid_score(true_dataset, fake_dataset, device=device)) 
