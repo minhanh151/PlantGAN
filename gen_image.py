@@ -18,7 +18,7 @@ def GenOptions():
     parser.add_argument('--zdim-out',type=int, default=3, help='number of classes of the output dim')
     parser.add_argument('--batch', type=int, default=225, help='batch size during generation')
     parser.add_argument('--path-save', type=str, default='results', help='path save inference image')
-    parser.add_argument('--niter', type=int, default=223, help='number of image generated')
+    parser.add_argument('--niter', type=int, default=223, help='number of iteration generated')
 
     return parser 
 

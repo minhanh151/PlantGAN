@@ -120,9 +120,9 @@ if __name__ == '__main__':
                                 ])):
             self.list_img = []
             image_extensions = {".jpg", ".jpeg", ".png"}
-            for root, dirs, files in os.walk(dataset_path):
+            for root, _, files in os.walk(dataset_path):
                 for file in files:
-                    
+                    # only take damage leaf
                     if 'healthy' in root.split('/')[-1]:
                         continue
                     
