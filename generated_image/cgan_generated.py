@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import os
 import util.utils as utils
+from torchvision.utils import save_image
 
 def gen_image(model, opt, device) -> None:
     
@@ -13,10 +14,13 @@ def gen_image(model, opt, device) -> None:
         sample_z_ = torch.rand((opt.batch, opt.zdim_in))
         sample_z_, sample_y_ = sample_z_.to(device), sample_y_.to(device)
 
-        samples = model(sample_z_, sample_y_)
-        samples = samples.cpu().data.numpy().transpose(0, 2, 3, 1)
-        samples = (samples + 1) / 2
+        if 'vae' in opt.type:
+            samples = model.decode(sample_z_, sample_y_)
+        elif 'gan' in opt.type:
+            samples = model(sample_z_, sample_y_)
+        else:
+            raise f'{opt.type} is not supported'
 
         for i, sample in enumerate(samples):
-            utils.save_images(sample[np.newaxis, ...], [1, 1],
-                            f'{opt.path_save}/test_{j+i}.png')
+            print(f'{opt.path_save}/test_{j+i}.png')
+            save_image(sample, f'{opt.path_save}/test_{j+i}.png', nrow=3)

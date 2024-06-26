@@ -6,7 +6,8 @@ import torch
 
 from generated_image.cgan_generated import gen_image
 from models.cgan_model import generator 
-
+from cvae_train import Model
+from vae_train import VAE
 
 def GenOptions():
     parser = argparse.ArgumentParser(description='some params for generating image')
@@ -19,6 +20,7 @@ def GenOptions():
     parser.add_argument('--batch', type=int, default=225, help='batch size during generation')
     parser.add_argument('--path-save', type=str, default='results', help='path save inference image')
     parser.add_argument('--niter', type=int, default=223, help='number of iteration generated')
+    parser.add_argument('--type', type=str, default='vae', help='type of model to infer')
 
     return parser 
 
@@ -31,8 +33,17 @@ if __name__ == '__main__':
     # load model 
     assert os.path.isfile(opt.weight), f'{opt.weight} is not a valid file'
     state_dict = torch.load(opt.weight)
-    model = generator(input_dim=opt.zdim_in, output_dim=opt.zdim_out, 
+    
+    if opt.type == 'cvae':
+        model = Model()
+    elif opt.type == 'vae':
+        model = VAE()
+    elif 'gan' in opt.type:
+        model = generator(input_dim=opt.zdim_in, output_dim=opt.zdim_out, 
                       input_size=opt.input_size, class_num=opt.classes)
+    else:
+        raise f'{opt.type} is not supported'
+    
     model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
