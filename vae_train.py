@@ -18,16 +18,16 @@ device = torch.device("cuda")
 num_workers = 5
 load_epoch = -1
 generate = True
-PATH_ZIP = "/storage/anhnn99/dataset/PlantVillage"
+PATH_ZIP = "/kaggle/input/plantdisease/PlantVillage"
 DIR_OUT = "results/anime"
 SPLIT_PERCENT = 0.9
 BATCH_SIZE = 64
 
 class VAE(nn.Module):
     def __init__(self, shape, latent_size=32):
-        super(VAE,self).__init__()
+        super(VAE, self).__init__()
         self.latent_size = latent_size
-        c, h, w = self.shape
+        c, h, w = shape
         self.hh = (h-1)//2**3 + 1
         self.ww = (w-1)//2**3 + 1
 
@@ -184,7 +184,7 @@ def test(epoch, model, test_loader):
 
 def generate_image(epoch, z, model):
     with torch.no_grad():
-        pred = model.decoder(torch.cat((z.to(device)), dim=1))
+        pred = model.decoder(z.to(device))
         plot(epoch, pred, name='Eval_')
         print("data Plotted")
 
@@ -211,7 +211,7 @@ def save_model(model, epoch):
 if __name__ == "__main__":
     
     print("dataloader created")
-    model = Model().to(device)
+    model = VAE((3,64,64)).to(device)
     print("model created")
     data_train = datasets.ImageFolder(PATH_ZIP, transform=transforms.Compose([
                                  transforms.Resize(64),
