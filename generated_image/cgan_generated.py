@@ -15,7 +15,7 @@ def gen_image(model, opt, device) -> None:
         sample_z_, sample_y_ = sample_z_.to(device), sample_y_.to(device)
 
         if 'vae' in opt.type:
-            samples = model.decode(sample_z_, sample_y_)
+            samples = model.decoder(sample_z_, sample_y_)
         elif 'gan' in opt.type:
             samples = model(sample_z_, sample_y_)
         else:
