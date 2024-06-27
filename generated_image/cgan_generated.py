@@ -13,14 +13,13 @@ def gen_image(model, opt, device) -> None:
         sample_y_ = torch.zeros(opt.batch, opt.classes).scatter_(1, torch.randint(0, opt.classes - 1, (opt.batch,  1)).type(torch.LongTensor), 1) #ONE HOT ENCODING 
         sample_z_ = torch.rand((opt.batch, opt.zdim_in))
         sample_z_, sample_y_ = sample_z_.to(device), sample_y_.to(device)
-
+        print(sample_z_.shape, sample_y_.shape)
         if 'vae' in opt.type:
-            samples = model.decoder(sample_z_, sample_y_)
+            samples = model.decoder(torch.cat((sample_z_, sample_y_), dim=1).to(device))
         elif 'gan' in opt.type:
             samples = model(sample_z_, sample_y_)
         else:
             raise f'{opt.type} is not supported'
 
         for i, sample in enumerate(samples):
-            print(f'{opt.path_save}/test_{j+i}.png')
             save_image(sample, f'{opt.path_save}/test_{j+i}.png', nrow=3)
