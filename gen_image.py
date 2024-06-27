@@ -37,7 +37,7 @@ if __name__ == '__main__':
     if opt.type == 'cvae':
         model = Model()
     elif opt.type == 'vae':
-        model = VAE()
+        model = VAE((3,64,64))
     elif 'gan' in opt.type:
         model = generator(input_dim=opt.zdim_in, output_dim=opt.zdim_out, 
                       input_size=opt.input_size, class_num=opt.classes)
