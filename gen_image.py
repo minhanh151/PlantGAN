@@ -42,7 +42,7 @@ if __name__ == '__main__':
         model = generator(input_dim=opt.zdim_in, output_dim=opt.zdim_out, 
                       input_size=opt.input_size, class_num=opt.classes)
     else:
-        raise f'{opt.type} is not supported'
+        raise NotImplementedError(f'{opt.type} is not supported')
     
     model.load_state_dict(state_dict)
     model.to(device)
