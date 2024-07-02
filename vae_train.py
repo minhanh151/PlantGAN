@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn. functional as F
 import torch.optim as optim
-import os
+import os 
 import sys
 from torchvision import datasets, transforms
 from torch.utils.data import random_split 
@@ -13,13 +13,14 @@ from torchvision.utils import save_image
 
 batch_size = 100
 learning_rate = 5e-4
-max_epoch = 150
+max_epoch = 100
 device = torch.device("cuda")
 num_workers = 5
 load_epoch = -1
 generate = True
-PATH_ZIP = "/kaggle/input/plantdisease/PlantVillage"
-DIR_OUT = "results/anime"
+# PATH_ZIP = "/kaggle/input/plantdisease/PlantVillage"
+PATH_ZIP = "/home/mia/Downloads/DATA/PlantVillage/train/"
+DIR_OUT = "results/vae"
 SPLIT_PERCENT = 0.9
 BATCH_SIZE = 64
 

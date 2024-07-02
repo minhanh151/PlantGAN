@@ -13,13 +13,14 @@ from torchvision.utils import save_image
 
 batch_size = 100
 learning_rate = 5e-4
-max_epoch = 150
+max_epoch = 100
 device = torch.device("cuda")
 num_workers = 5
 load_epoch = -1
 generate = True
-PATH_ZIP = "/storage/anhnn99/dataset/PlantVillage"
-DIR_OUT = "results/anime"
+# PATH_ZIP = "/storage/anhnn99/dataset/PlantVillage"
+PATH_ZIP = "/home/mia/Downloads/DATA/PlantVillage/train/"
+DIR_OUT = "results/cvae"
 SPLIT_PERCENT = 0.9
 BATCH_SIZE = 64
 

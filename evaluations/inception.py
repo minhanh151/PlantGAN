@@ -142,8 +142,10 @@ if __name__ == '__main__':
             return len(self.list_img)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    fake_dataset = IgnoreLabelDataset(dataset_path='/storage/anhnn99/projects/Image-Generation-with-VAE/PlantGAN/results/test')
-    true_dataset = TrueDataset(dataset_path='/storage/anhnn99/dataset/PlantVillage')
+    # fake_dataset = IgnoreLabelDataset(dataset_path='/storage/anhnn99/projects/Image-Generation-with-VAE/PlantGAN/results/test')
+    # true_dataset = TrueDataset(dataset_path='/storage/anhnn99/dataset/PlantVillage')
+    fake_dataset = IgnoreLabelDataset(dataset_path='/home/mia/Downloads/GitHub/PlantGAN/results/gen_cgan')
+    true_dataset = TrueDataset(dataset_path='/home/mia/Downloads/DATA/PlantVillage/train/')
     
     print(inception_score(fake_dataset, cuda=True, batch_size=32, resize=True, splits=10))
     print(fid_score(true_dataset, fake_dataset, device=device)) 
