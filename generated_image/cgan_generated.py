@@ -40,11 +40,6 @@ def gen_image(model, opt, device) -> None:
         elif opt.type == 'vae':
             samples = model.decoder(sample_z_)
         elif 'gan' in opt.type:
-
-            sample_y_ = torch.zeros(opt.batch, opt.classes).scatter_(1, torch.randint(0, opt.classes - 1, (opt.batch,  1)).type(torch.LongTensor), 1) #ONE HOT ENCODING 
-            sample_z_ = torch.rand((opt.batch, opt.zdim_in))
-
-            sample_z_, sample_y_ = sample_z_.to(device), sample_y_.to(device)
             samples = model(sample_z_, sample_y_)
 
             if torch.cuda.is_available():
