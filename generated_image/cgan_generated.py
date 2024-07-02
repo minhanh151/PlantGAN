@@ -55,7 +55,7 @@ def gen_image(model, opt, device) -> None:
         if 'gan' in opt.type:
             for i, sample in enumerate(samples):
                 rgb = (sample * 255).astype(np.uint8)
-                imageio.imwrite(f'{output_path}/test_{i}.png', rgb)
+                imageio.imwrite(f'{output_path}/test_{j+i}.png', rgb)
         else:
             for i, sample in enumerate(samples):
                 save_image(sample, f'{output_path}/test_{j+i}.png', nrow=3)
