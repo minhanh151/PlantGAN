@@ -1,1 +1,3 @@
 checkpoints/plantvillage_cgan/*.pkl
+results/gen_cgan/*
+results/*
