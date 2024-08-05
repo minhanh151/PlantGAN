@@ -102,11 +102,17 @@ if __name__ == '__main__':
             
         def __getitem__(self, index):
             img_path = self.list_img[index]
-            img = Image.open(img_path)
+            try:
+                img = Image.open(img_path)
+            except:
+                raise OSError(f'{img_path} is not good')
             # img = cv2.resize(img, (32,32))
             
             if self.transform:
-                img = self.transform(img)
+                try:
+                    img = self.transform(img)
+                except:
+                    raise OSError(f'{img_path} is not good')
             
             return img
         def __len__(self):
@@ -142,8 +148,8 @@ if __name__ == '__main__':
             return len(self.list_img)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    fake_dataset = IgnoreLabelDataset(dataset_path='/home/mia/Downloads/GitHub/PlantGAN/results/gen_cgan')
-    true_dataset = TrueDataset(dataset_path="/home/mia/Downloads/DATA/PlantVillage/train/")
+    fake_dataset = IgnoreLabelDataset(dataset_path='/home/mia/Downloads/GitHub/PlantGAN/results/gen_stable_diffusion_v4')
+    true_dataset = TrueDataset(dataset_path="/home/mia/Downloads/DATA/PlantVillage/")
     
     print(inception_score(fake_dataset, cuda=True, batch_size=32, resize=True, splits=10))
     print(fid_score(true_dataset, fake_dataset, device=device)) 
