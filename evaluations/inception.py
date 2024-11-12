@@ -1,155 +1,875 @@
+import PIL.Image
+from diffusers import DiffusionPipeline
+import streamlit as st
+from diffusers.training_utils import set_seed
+
 import torch
-from torch import nn
-from torch.autograd import Variable
-from torch.nn import functional as F
-import torch.utils.data
+from torchvision import models, transforms
+import torch.nn as nn
 
-from torchvision.models.inception import inception_v3
-from torchmetrics.image.fid import FrechetInceptionDistance
-import numpy as np
-from scipy.stats import entropy
+from datetime import datetime
+import PIL 
+import numpy as np 
+from typing import List, Optional
+import dnnlib
+import os
+import legacy
+from math import ceil
+import gc
+import time
+from collections import Counter
+from codecarbon import EmissionsTracker
+import pandas as pd 
+from evaluation import TrueDataset, fid_score
+import cv2
+# ===============Define global variable=============================
+CLASSIFIER_DEVICE=torch.device('cuda:0')
+BATCH_SIZE = 40
+BATCH_SIZE_STYLEGAN2 = 20
+FOLDER_GT = "/home/mia/Downloads/DATA/PlantVillage/val"
+MODEL_LIST = ["StyleGan2",
+            "StableDiffusion + LORA", 
+            "StableDiffusion + LORA + Perceptual Loss", 
+            "StableDiffusion + LORA + Perceptual Loss+ L1", 
+            "StableDiffusion + LORA + Perceptual Loss + L1 + L2"]
 
-def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
-    """Computes the inception score of the generated images imgs
+CLASSES_LIST = [
+    'Pepper bell bacterial',
+    'Pepper bell healthy',
+    'Potato early blight',
+    'Potato late blight',
+    'Potato healthy',
+    'Tomato bacterial spot',
+    'Tomato early blight',
+    'Tomato late blight',
+    'Tomato leaf mold',
+    'Tomato septorial leaf spot',
+    'Tomato spider mites',
+    'Tomato target spot',
+    'Tomato yellow curl virus',
+    'Tomato mosaic virus',
+    'Tomato healthy'
+]
 
-    imgs -- Torch dataset of (3xHxW) numpy images normalized in the range [-1, 1]
-    cuda -- whether or not to run on GPU
-    batch_size -- batch size for feeding into Inception v3
-    splits -- number of splits
-    """
-    N = len(imgs)
 
-    assert batch_size > 0
-    assert N > batch_size
+CLASS_STYLEGAN_LIST = [
+    'Potato early blight',
+    'Tomato yellow curl virus',
+    'Potato late blight',
+    'Pepper bell bacterial',
+    'Tomato spider mites', 
+    'Tomato bacterial spot', 
+    'Tomato target spot',
+    'Tomato late blight', 
+    'Tomato early blight', 
+    'Tomato septorial leaf spot' , 
+    'Tomato leaf mold', 
+    'Pepper bell healthy',
+    'Tomato mosaic virus',
+    'Potato healthy', 
+    'Tomato healthy', 
+]
+PROMPT = [
+        'bell pepper bacterial leaf spot with small dark brown water-soaked lesions',
+        'a healthy bell pepper leaf',
+        'potato early leaf blight with small dark brown spots that have concentric rings',
+        'potato late leaf blight featuring irregular dark spots and lighter green halos',
+        'a healthy potato leaf with a lush green appearance and no visible signs of disease',
+        'tomato leaf showing symptoms of bacterial leaf spot with small dark brown lesions that have yellow halos',
+        'tomato leaf showing symptoms of early blight with dark brown spots that have concentric rings and surrounding yellow halos',
+        'tomato late leaf blight with large irregularly shaped dark brown to black lesions pale green or yellowish tissue',
+        'tomato leaf mold with yellow blotches and greyish-brown mould',
+        'tomato leaf septoria spot with numerous small circular dark brown lesions that have grayish centers and surrounded by yellow halos',
+        'tomato leaf two-spot spider mites with visible stippling tiny yellow or white specks and a mottled appearance due to mite feeding',
+        'tomato leaf Target Spot with small circular to oval dark brown to black spots',
+        'tomato Yellow Leaf Curl Virus with pronounced leaf curling crinkling and a yellowing of the leaf edges',
+        'tomato leaf Mosaic Virus with mottled patterns of light and dark green uneven leaf coloring and a general mosaic-like appearance',
+        'healthy tomato leaf with a vibrant green color smooth texture showing strong well-defined veins and overall vitalit',
+    ]
 
-    # Set up dtype
-    if cuda:
-        dtype = torch.cuda.FloatTensor
+CLASS2NAME = [
+   'Potato___Early_blight', 
+   'Tomato__Tomato_YellowLeaf__Curl_Virus', 
+   'Potato___Late_blight', 
+   'Pepper__bell___Bacterial_spot', 
+   'Tomato_Spider_mites_Two_spotted_spider_mite', 
+   'Tomato_Bacterial_spot', 
+   'Tomato__Target_Spot', 
+   'Tomato_Late_blight', 
+   'Tomato_Early_blight', 
+   'Tomato_Septoria_leaf_spot', 
+   'Tomato_Leaf_Mold', 
+   'Pepper__bell___healthy', 
+   'Tomato__Tomato_mosaic_virus', 
+   'Potato___healthy', 
+   'Tomato_healthy',
+]
+# ===========================================================================
+
+@st.cache_resource()
+def load_classfier():
+    num_classes = len(CLASSES_LIST)
+    model_ft = models.inception_v3(pretrained=True)
+    # Handle the auxilary net
+    num_ftrs = model_ft.AuxLogits.fc.in_features
+    model_ft.AuxLogits.fc = nn.Linear(num_ftrs, num_classes)
+    # Handle the primary net
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs,num_classes)
+
+    state_dict = torch.load("inceptionv3_classifier.pt")
+    model_ft.load_state_dict(state_dict)
+    model_ft.eval()
+    return model_ft
+
+@st.cache_resource()
+def load_model(path2LoRA):
+    pipeline = DiffusionPipeline.from_pretrained(
+        "runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16, use_safetensors=True
+    )
+    pipeline.load_lora_weights(path2LoRA, weight_name="pytorch_lora_weights.safetensors", adapter_name="plant")
+
+    return pipeline
+    
+@st.cache_resource()
+def load_gan(path='/workspace/stylegan2/plantvillage/00005-PlantVillage-cond-auto4/network-snapshot-023788.pkl'):
+    #load all the model
+    with dnnlib.util.open_url(path) as f:
+        stylegan = legacy.load_network_pkl(f)['G_ema'].to(device) # type: ignore
+    return stylegan
+
+
+@st.fragment
+def display(list_image, list_predict, save_folder=None, save=False):
+    controls = st.columns(3)
+    with controls[0]:
+        batch_size = st.select_slider("Batch size:",range(10,110,10))
+    with controls[1]:
+        row_size = st.select_slider("Row size:", range(1,6), value = 5)
+    num_batches = ceil(len(list_image)/batch_size)
+    with controls[2]:
+        page = st.selectbox("Page", range(1,num_batches+1))
+    batch_img = list_image[(page-1)*batch_size : page*batch_size]
+    batch_pred = list_predict[(page-1)*batch_size : page*batch_size]
+    grid = st.columns(row_size)
+    col = 0
+    i = 0
+    for image, pred in zip(batch_img, batch_pred):
+        with grid[col]:
+            if save:
+                cv2.imwrite(f'{folder_save}/{i}.jpg')
+            st.image(image, caption=f"Predicted: {CLASSES_LIST[int(pred)]}")
+            i += 1
+        col = (col + 1) % row_size
+
+# print(pipeline.device)
+if __name__ =='__main__':
+    
+    st.title("Stable Diffusion for leaf generation")
+    classifier = load_classfier()
+    model_choice = st.selectbox(
+                "Stable Diffusion Model version",
+                tuple(MODEL_LIST),
+                index=None,
+                placeholder="Select model...",
+            )
+    class_choice = st.selectbox(
+            "Choose type of leaf",
+            tuple(CLASSES_LIST),
+            index=None,
+            placeholder="Select type of leaf..."
+        )
+    
+    write_file = st.checkbox("save prediction")
+    if write_file:
+        cal_fid = st.checkbox("Show FID score")
     else:
-        if torch.cuda.is_available():
-            print("WARNING: You have a CUDA device, so you should probably set cuda=True")
-        dtype = torch.FloatTensor
-
-    # Set up dataloader
-    dataloader = torch.utils.data.DataLoader(imgs, batch_size=batch_size)
-
-    # Load inception model
-    inception_model = inception_v3(pretrained=True, transform_input=False).type(dtype)
-    inception_model.eval();
-    up = nn.Upsample(size=(299, 299), mode='bilinear').type(dtype)
-    def get_pred(x):
-        if resize:
-            x = up(x)
-        x = inception_model(x)
-        return F.softmax(x).data.cpu().numpy()
-
-    # Get predictions
-    preds = np.zeros((N, 1000))
-
-    for i, batch in enumerate(dataloader, 0):
-        batch = batch.type(dtype)
-        batchv = Variable(batch)
-        batch_size_i = batch.size()[0]
-
-        preds[i*batch_size:i*batch_size + batch_size_i] = get_pred(batchv)
-
-    # Now compute the mean kl-div
-    split_scores = []
-
-    for k in range(splits):
-        part = preds[k * (N // splits): (k+1) * (N // splits), :]
-        py = np.mean(part, axis=0)
-        scores = []
-        for i in range(part.shape[0]):
-            pyx = part[i, :]
-            scores.append(entropy(pyx, py))
-        split_scores.append(np.exp(np.mean(scores)))
-
-    return np.mean(split_scores), np.std(split_scores)
+        cal_fid = False
 
 
-def fid_score(real_dataset, fake_dataset, device, batch_size=32, num_feature=2048):
-    # create data loader
-    real_data_loader = torch.utils.data.DataLoader(real_dataset, batch_size=batch_size)
-    generated_data_loader = torch.utils.data.DataLoader(fake_dataset, batch_size=batch_size)
+    number_of_image = st.slider(
+            "number_of_image_gen",
+            min_value=5,
+            max_value=100,
+            value=50,
+            step=1,
+            label_visibility="visible",
+            help="Number of image the models have to gen",
+        )
 
-    # Calculate FID Score
-    fid = FrechetInceptionDistance(feature=num_feature).to(device)  # Use 2048 features (default)
-
-    for real_images in real_data_loader:
-        fid.update(real_images.type(torch.uint8).to(device), real=True)  # Update with real images
-
-    for generated_images in generated_data_loader:
-        fid.update(generated_images.type(torch.uint8).to(device), real=False)  # Update with generated images
-
-    fid_score = fid.compute()
-    return fid_score
-
-
-if __name__ == '__main__':
-    import torchvision.transforms as transforms
-    from PIL import Image 
-    import os
-    class IgnoreLabelDataset(torch.utils.data.Dataset):
-        def __init__(self, dataset_path, transform=transforms.Compose([
-                                    transforms.Resize(32),
-                                    transforms.ToTensor(),
-                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                ])):
-            list_img_name = os.listdir(dataset_path)
-            self.list_img = [f'{dataset_path}/{img}' for img in list_img_name]
-            self.transform = transform
-            
-        def __getitem__(self, index):
-            img_path = self.list_img[index]
-            try:
-                img = Image.open(img_path)
-            except:
-                raise OSError(f'{img_path} is not good')
-            # img = cv2.resize(img, (32,32))
-            
-            if self.transform:
-                try:
-                    img = self.transform(img)
-                except:
-                    raise OSError(f'{img_path} is not good')
-            
-            return img
-        def __len__(self):
-            return len(self.list_img)
+    trans = transforms.Compose([
+        transforms.Resize(299),
+        transforms.CenterCrop(299),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]) 
     
-    class TrueDataset(torch.utils.data.Dataset):
-        def __init__(self, dataset_path, transform=transforms.Compose([
-                                    transforms.Resize(32),
-                                    transforms.ToTensor(),
-                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                ])):
-            self.list_img = []
-            image_extensions = {".jpg", ".jpeg", ".png"}
-            for root, _, files in os.walk(dataset_path):
-                for file in files:
-                    # only take damage leaf
-                    if 'healthy' in root.split('/')[-1]:
-                        continue
-                    
-                    if os.path.splitext(file)[1].lower() in image_extensions:
-                        self.list_img.append(os.path.join(root, file))
+    
+    # define list of image generated
+    list_img_gen = []
+    list_pred_gen = [] 
+    if not model_choice or not class_choice or not number_of_image:
+        st.stop()
 
-            self.transform = transform
-            
-        def __getitem__(self, index):
-            img_path = self.list_img[index]
-            img = Image.open(img_path)
-            if self.transform:
-                img = self.transform(img)
-            
-            return img
-        def __len__(self):
-            return len(self.list_img)
     
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    fake_dataset = IgnoreLabelDataset(dataset_path='/home/mia/Downloads/GitHub/PlantGAN/results/gen_stable_diffusion_v4')
-    true_dataset = TrueDataset(dataset_path="/home/mia/Downloads/DATA/PlantVillage/")
+
+
+    tracker = EmissionsTracker(allow_multiple_runs=True)
+    st.subheader("Parameters", anchor=None)
     
-    print(inception_score(fake_dataset, cuda=True, batch_size=32, resize=True, splits=10))
-    print(fid_score(true_dataset, fake_dataset, device=device)) 
+    if "StableDiffusion" in model_choice:
+        # ===============StableDiffusionParameters===============================
+        num_inference_steps = 25
+        with st.expander("Show Params"):
+            guidance_scale = st.slider(
+                "guidance_scale",
+                min_value=0.0,
+                max_value=30.0,
+                value=7.0,
+                step=0.1,
+                help="Guidance scale is enabled by setting `guidance_scale > 1`. Higher guidance scale encourages to generate images that are closely linked to the text `prompt`, usually at the expense of lower image quality.",
+                label_visibility="visible",
+            )
+            height = st.slider(
+                "height",
+                min_value=64,
+                max_value=1024,
+                value=256,
+                step=8,
+                label_visibility="visible",
+            )
+            width = st.slider(
+                "width",
+                min_value=64,
+                max_value=1024,
+                value=256,
+                step=8,
+                label_visibility="visible",
+            )
+            eta = st.slider(
+                "eta (η)",
+                min_value=0.0,
+                max_value=5.0,
+                value=0.0,
+                step=0.1,
+                help="Corresponds to parameter eta (η) in the DDIM paper: https://arxiv.org/abs/2010.02502",
+                label_visibility="visible",
+            )
+            seed = st.slider(
+                "seed",
+                min_value=0,
+                max_value=1024,
+                value=10,
+                step=1,
+                label_visibility="visible",
+                help="seed",
+            )
+            negative_prompt = 'anime, do not have background, fruit, bad quality, low quality, pepper color'
+        # =====================================================================
+
+
+        
+        tracker.start()
+        set_seed(seed)
+        uid = datetime.now().strftime("%Y%m%d_%H:%M:%S")
+        submit_button = st.button("Generate", help=None, args=None, kwargs=None)
+        my_bar = st.progress(0)
+
+        if write_file:
+            folder_save = f'results/{model_choice}/{CLASS2NAME[CLASS_STYLEGAN_LIST.index(class_choice)]}_{number_of_image}_seed'
+            os.makedirs(f'{folder_save}/image', exist_ok=True)
+
+        # load model
+        if MODEL_LIST.index(model_choice) == 1:
+            pipeline = load_model('/workspace/diffusers/examples/text_to_image/plantVillage_text2image_/checkpoint-2500')
+            device = torch.device('cuda:0')
+        elif MODEL_LIST.index(model_choice) == 2:
+            pipeline = load_model('/workspace/diffusers/examples/text_to_image/plantVillage_text2image_perceptual_loss/checkpoint-2500')
+            device = torch.device('cuda:1')
+        elif MODEL_LIST.index(model_choice) == 3:
+            pipeline = load_model('/workspace/diffusers/examples/text_to_image/plantVillage_text2image_lpips_l1/checkpoint-2500')
+            device = torch.device('cuda:2')
+        else:
+            pipeline = load_model('/workspace/diffusers/examples/text_to_image/plantVillage_text2image_lpips_l1_lr1e-5_l2_2000/checkpoint-2500')
+            device = torch.device('cuda:3')
+        
+        text_prompt = PROMPT[CLASSES_LIST.index(class_choice)]
+        classifier.to(CLASSIFIER_DEVICE)
+        pipeline.to(device)
+ 
+        model_loading_emssion: float =  tracker.stop()
+        
+        if not submit_button:
+            # print(submit_button)
+            st.stop()
+
+        tracker.start()
+        
+        st.subheader("Output", anchor=None)
+        start_time = time.time()
+        
+        
+        for ii in range(0, number_of_image, BATCH_SIZE):
+            # TODO set different seed 
+            num_images_per_prompt = min(BATCH_SIZE, number_of_image - ii)
+            result = pipeline(text_prompt, num_inference_steps=num_inference_steps, cross_attention_kwargs={"scale": 0.8}, 
+                                guidance_scale=guidance_scale, height=height, width=width, num_images_per_prompt=num_images_per_prompt, 
+                                negative_prompt=negative_prompt).images
+        
+            list_img_gen.extend(result)
+            
+            # predict class
+            res_tensor = torch.cat([trans(img).unsqueeze(0) for img in result], dim=0)
+            output = classifier(res_tensor.to(CLASSIFIER_DEVICE))
+            _, list_cls_idx = torch.max(output, dim=1)
+            
+            list_pred_gen.extend(list_cls_idx)
+
+            del res_tensor
+            del output
+            torch.cuda.empty_cache()
+            gc.collect()
+
+            list_pred_gen = [int(pred) for pred in list_pred_gen]
+            list_gt = [CLASSES_LIST.index(class_choice)] * number_of_image
+            positive_sample = len(list((Counter(list_pred_gen) & Counter(list_gt)).elements()))
+        
+
+        infer_emssion: float = tracker.stop()
+        st.text(f"Running time: {time.time()- start_time:.2f}s")
+        st.text(f"True Predict: {positive_sample}, Negative Predict: {number_of_image - positive_sample}, Accuracy: {int(positive_sample/number_of_image * 100)}%")
+        if cal_fid:
+            # cal fid 
+            folder_gt = f'{FOLDER_GT}/{CLASS2NAME[CLASS_STYLEGAN_LIST.index(class_choice)]}'
+            true_dataset = TrueDataset(folder_gt)
+            fake_dataset = TrueDataset(folder_save)
+            fid = fid_score(true_dataset, fake_dataset, device)
+            st.text(f"FID_SCORE: {fid:.2f}")
+        else:
+            fid = None
+
+        if write_file:
+            df = pd.DataFrame({
+                "True Predict": positive_sample,
+                "Negative Predict": number_of_image - positive_sample,
+                "Accuracy": positive_sample/number_of_image,
+                "FID": fid,
+                'Emission': infer_emssion,
+            }).to_csv(f"{folder_save}/result.csv")
+
+        
+        st.text(f"Emission from loading: {model_loading_emssion:.8f}, Emission from inference: {infer_emssion:.4f}")
+        
+       
+        display(list_image=list_img_gen, list_predict=list_pred_gen)
+        
+            
+    elif "StyleGan" in model_choice:
+        with st.expander("Show params"):
+            seed = st.slider(
+                "seed",
+                min_value=0,
+                max_value=100,
+                value=10,
+                step=1,
+                label_visibility="visible",
+                help="seed",
+            )
+            truncation_psi = st.slider(
+                "truncation_psi",
+                min_value=0,
+                max_value=5,
+                value=1,
+                step=1,
+                label_visibility="visible",
+                help="seed",
+            )
+            noise_mode = st.selectbox(
+                "Choose type of noise",
+                ('const', 'random', 'none'),
+            )
+            device = torch.device('cuda:0')
+            
+            tracker.start()
+            G = load_gan()
+            classifier.to(device)
+            model_loading_emssion: float =  tracker.stop()
+        
+        submit_button = st.button("Generate", help=None, args=None, kwargs=None)
+        my_bar = st.progress(0)
+        if not submit_button:
+            st.stop()
+        
+        
+        if write_file:
+            folder_save = f'results/{model_choice}/{CLASS2NAME[CLASS_STYLEGAN_LIST.index(class_choice)]}_{number_of_image}_seed'
+            os.makedirs(folder_save, exist_ok=True)
+
+    
+        st.subheader("Output", anchor=None)
+        start_time = time.time()
+
+        tracker.start()
+        # ===gen_image========
+        for ii in range(0, number_of_image, BATCH_SIZE_STYLEGAN2):
+            label = torch.zeros([BATCH_SIZE_STYLEGAN2, G.c_dim], device=device)
+            label[:, CLASS_STYLEGAN_LIST.index(class_choice)] = 1
+            z = torch.from_numpy(np.random.RandomState( + ii).randn(BATCH_SIZE_STYLEGAN2, G.z_dim)).to(device)
+            img = G(z, label, truncation_psi=1, noise_mode=noise_mode)
+            img_show = (img.clone().permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+            img_show = np.array(img_show.cpu())
+            img_show = [PIL.Image.fromarray(im) for im in img_show]
+        #====================
+            list_img_gen.extend(img_show)
+            img = torch.nn.functional.interpolate(img, size=299)
+            output = classifier(img)
+            conf, cls_idx = torch.max(output, dim=1)
+            list_pred_gen.extend(cls_idx)
+            torch.cuda.empty_cache()
+        
+        list_pred_gen = [int(pred) for pred in list_pred_gen]
+        list_gt = [CLASSES_LIST.index(class_choice)] * number_of_image
+        positive_sample = len(list((Counter(list_pred_gen) & Counter(list_gt)).elements()))
+        infer_emssion: float = tracker.stop()
+        
+        st.text(f"Running time: {time.time()- start_time:.2f}s")
+        st.text(f"True Predict: {positive_sample}, Negative Predict: {number_of_image - positive_sample}, Accuracy: {int(positive_sample/number_of_image * 100)}%")
+        st.text(f"Emission from loading: {model_loading_emssion* 1e8:.2f} * 10^-8 Wh, Emission from inference: {infer_emssion * 1e4:.4f} * 10^-4 Wh")
+        display(list_image=list_img_gen, list_predict=list_pred_gen)import PIL.Image
+from diffusers import DiffusionPipeline
+import streamlit as st
+from diffusers.training_utils import set_seed
+
+import torch
+from torchvision import models, transforms
+import torch.nn as nn
+
+from datetime import datetime
+import PIL 
+import numpy as np 
+from typing import List, Optional
+import dnnlib
+import os
+import legacy
+from math import ceil
+import gc
+import time
+from collections import Counter
+from codecarbon import EmissionsTracker
+import pandas as pd 
+from evaluation import TrueDataset, fid_score
+import cv2
+# ===============Define global variable=============================
+CLASSIFIER_DEVICE=torch.device('cuda:0')
+BATCH_SIZE = 40
+BATCH_SIZE_STYLEGAN2 = 20
+FOLDER_GT = "/home/mia/Downloads/DATA/PlantVillage/val"
+MODEL_LIST = ["StyleGan2",
+            "StableDiffusion + LORA", 
+            "StableDiffusion + LORA + Perceptual Loss", 
+            "StableDiffusion + LORA + Perceptual Loss+ L1", 
+            "StableDiffusion + LORA + Perceptual Loss + L1 + L2"]
+
+CLASSES_LIST = [
+    'Pepper bell bacterial',
+    'Pepper bell healthy',
+    'Potato early blight',
+    'Potato late blight',
+    'Potato healthy',
+    'Tomato bacterial spot',
+    'Tomato early blight',
+    'Tomato late blight',
+    'Tomato leaf mold',
+    'Tomato septorial leaf spot',
+    'Tomato spider mites',
+    'Tomato target spot',
+    'Tomato yellow curl virus',
+    'Tomato mosaic virus',
+    'Tomato healthy'
+]
+
+
+CLASS_STYLEGAN_LIST = [
+    'Potato early blight',
+    'Tomato yellow curl virus',
+    'Potato late blight',
+    'Pepper bell bacterial',
+    'Tomato spider mites', 
+    'Tomato bacterial spot', 
+    'Tomato target spot',
+    'Tomato late blight', 
+    'Tomato early blight', 
+    'Tomato septorial leaf spot' , 
+    'Tomato leaf mold', 
+    'Pepper bell healthy',
+    'Tomato mosaic virus',
+    'Potato healthy', 
+    'Tomato healthy', 
+]
+PROMPT = [
+        'bell pepper bacterial leaf spot with small dark brown water-soaked lesions',
+        'a healthy bell pepper leaf',
+        'potato early leaf blight with small dark brown spots that have concentric rings',
+        'potato late leaf blight featuring irregular dark spots and lighter green halos',
+        'a healthy potato leaf with a lush green appearance and no visible signs of disease',
+        'tomato leaf showing symptoms of bacterial leaf spot with small dark brown lesions that have yellow halos',
+        'tomato leaf showing symptoms of early blight with dark brown spots that have concentric rings and surrounding yellow halos',
+        'tomato late leaf blight with large irregularly shaped dark brown to black lesions pale green or yellowish tissue',
+        'tomato leaf mold with yellow blotches and greyish-brown mould',
+        'tomato leaf septoria spot with numerous small circular dark brown lesions that have grayish centers and surrounded by yellow halos',
+        'tomato leaf two-spot spider mites with visible stippling tiny yellow or white specks and a mottled appearance due to mite feeding',
+        'tomato leaf Target Spot with small circular to oval dark brown to black spots',
+        'tomato Yellow Leaf Curl Virus with pronounced leaf curling crinkling and a yellowing of the leaf edges',
+        'tomato leaf Mosaic Virus with mottled patterns of light and dark green uneven leaf coloring and a general mosaic-like appearance',
+        'healthy tomato leaf with a vibrant green color smooth texture showing strong well-defined veins and overall vitalit',
+    ]
+
+CLASS2NAME = [
+   'Potato___Early_blight', 
+   'Tomato__Tomato_YellowLeaf__Curl_Virus', 
+   'Potato___Late_blight', 
+   'Pepper__bell___Bacterial_spot', 
+   'Tomato_Spider_mites_Two_spotted_spider_mite', 
+   'Tomato_Bacterial_spot', 
+   'Tomato__Target_Spot', 
+   'Tomato_Late_blight', 
+   'Tomato_Early_blight', 
+   'Tomato_Septoria_leaf_spot', 
+   'Tomato_Leaf_Mold', 
+   'Pepper__bell___healthy', 
+   'Tomato__Tomato_mosaic_virus', 
+   'Potato___healthy', 
+   'Tomato_healthy',
+]
+# ===========================================================================
+
+@st.cache_resource()
+def load_classfier():
+    num_classes = len(CLASSES_LIST)
+    model_ft = models.inception_v3(pretrained=True)
+    # Handle the auxilary net
+    num_ftrs = model_ft.AuxLogits.fc.in_features
+    model_ft.AuxLogits.fc = nn.Linear(num_ftrs, num_classes)
+    # Handle the primary net
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs,num_classes)
+
+    state_dict = torch.load("inceptionv3_classifier.pt")
+    model_ft.load_state_dict(state_dict)
+    model_ft.eval()
+    return model_ft
+
+@st.cache_resource()
+def load_model(path2LoRA):
+    pipeline = DiffusionPipeline.from_pretrained(
+        "runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16, use_safetensors=True
+    )
+    pipeline.load_lora_weights(path2LoRA, weight_name="pytorch_lora_weights.safetensors", adapter_name="plant")
+
+    return pipeline
+    
+@st.cache_resource()
+def load_gan(path='/workspace/stylegan2/plantvillage/00005-PlantVillage-cond-auto4/network-snapshot-023788.pkl'):
+    #load all the model
+    with dnnlib.util.open_url(path) as f:
+        stylegan = legacy.load_network_pkl(f)['G_ema'].to(device) # type: ignore
+    return stylegan
+
+
+@st.fragment
+def display(list_image, list_predict, save_folder=None, save=False):
+    controls = st.columns(3)
+    with controls[0]:
+        batch_size = st.select_slider("Batch size:",range(10,110,10))
+    with controls[1]:
+        row_size = st.select_slider("Row size:", range(1,6), value = 5)
+    num_batches = ceil(len(list_image)/batch_size)
+    with controls[2]:
+        page = st.selectbox("Page", range(1,num_batches+1))
+    batch_img = list_image[(page-1)*batch_size : page*batch_size]
+    batch_pred = list_predict[(page-1)*batch_size : page*batch_size]
+    grid = st.columns(row_size)
+    col = 0
+    i = 0
+    for image, pred in zip(batch_img, batch_pred):
+        with grid[col]:
+            if save:
+                cv2.imwrite(f'{folder_save}/{i}.jpg')
+            st.image(image, caption=f"Predicted: {CLASSES_LIST[int(pred)]}")
+            i += 1
+        col = (col + 1) % row_size
+
+# print(pipeline.device)
+if __name__ =='__main__':
+    
+    st.title("Stable Diffusion for leaf generation")
+    classifier = load_classfier()
+    model_choice = st.selectbox(
+                "Stable Diffusion Model version",
+                tuple(MODEL_LIST),
+                index=None,
+                placeholder="Select model...",
+            )
+    class_choice = st.selectbox(
+            "Choose type of leaf",
+            tuple(CLASSES_LIST),
+            index=None,
+            placeholder="Select type of leaf..."
+        )
+    
+    write_file = st.checkbox("save prediction")
+    if write_file:
+        cal_fid = st.checkbox("Show FID score")
+    else:
+        cal_fid = False
+
+
+    number_of_image = st.slider(
+            "number_of_image_gen",
+            min_value=5,
+            max_value=100,
+            value=50,
+            step=1,
+            label_visibility="visible",
+            help="Number of image the models have to gen",
+        )
+
+    trans = transforms.Compose([
+        transforms.Resize(299),
+        transforms.CenterCrop(299),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]) 
+    
+    
+    # define list of image generated
+    list_img_gen = []
+    list_pred_gen = [] 
+    if not model_choice or not class_choice or not number_of_image:
+        st.stop()
+
+    
+
+
+    tracker = EmissionsTracker(allow_multiple_runs=True)
+    st.subheader("Parameters", anchor=None)
+    
+    if "StableDiffusion" in model_choice:
+        # ===============StableDiffusionParameters===============================
+        num_inference_steps = 25
+        with st.expander("Show Params"):
+            guidance_scale = st.slider(
+                "guidance_scale",
+                min_value=0.0,
+                max_value=30.0,
+                value=7.0,
+                step=0.1,
+                help="Guidance scale is enabled by setting `guidance_scale > 1`. Higher guidance scale encourages to generate images that are closely linked to the text `prompt`, usually at the expense of lower image quality.",
+                label_visibility="visible",
+            )
+            height = st.slider(
+                "height",
+                min_value=64,
+                max_value=1024,
+                value=256,
+                step=8,
+                label_visibility="visible",
+            )
+            width = st.slider(
+                "width",
+                min_value=64,
+                max_value=1024,
+                value=256,
+                step=8,
+                label_visibility="visible",
+            )
+            eta = st.slider(
+                "eta (η)",
+                min_value=0.0,
+                max_value=5.0,
+                value=0.0,
+                step=0.1,
+                help="Corresponds to parameter eta (η) in the DDIM paper: https://arxiv.org/abs/2010.02502",
+                label_visibility="visible",
+            )
+            seed = st.slider(
+                "seed",
+                min_value=0,
+                max_value=1024,
+                value=10,
+                step=1,
+                label_visibility="visible",
+                help="seed",
+            )
+            negative_prompt = 'anime, do not have background, fruit, bad quality, low quality, pepper color'
+        # =====================================================================
+
+
+        
+        tracker.start()
+        set_seed(seed)
+        uid = datetime.now().strftime("%Y%m%d_%H:%M:%S")
+        submit_button = st.button("Generate", help=None, args=None, kwargs=None)
+        my_bar = st.progress(0)
+
+        if write_file:
+            folder_save = f'results/{model_choice}/{CLASS2NAME[CLASS_STYLEGAN_LIST.index(class_choice)]}_{number_of_image}_seed'
+            os.makedirs(f'{folder_save}/image', exist_ok=True)
+
+        # load model
+        if MODEL_LIST.index(model_choice) == 1:
+            pipeline = load_model('/workspace/diffusers/examples/text_to_image/plantVillage_text2image_/checkpoint-2500')
+            device = torch.device('cuda:0')
+        elif MODEL_LIST.index(model_choice) == 2:
+            pipeline = load_model('/workspace/diffusers/examples/text_to_image/plantVillage_text2image_perceptual_loss/checkpoint-2500')
+            device = torch.device('cuda:1')
+        elif MODEL_LIST.index(model_choice) == 3:
+            pipeline = load_model('/workspace/diffusers/examples/text_to_image/plantVillage_text2image_lpips_l1/checkpoint-2500')
+            device = torch.device('cuda:2')
+        else:
+            pipeline = load_model('/workspace/diffusers/examples/text_to_image/plantVillage_text2image_lpips_l1_lr1e-5_l2_2000/checkpoint-2500')
+            device = torch.device('cuda:3')
+        
+        text_prompt = PROMPT[CLASSES_LIST.index(class_choice)]
+        classifier.to(CLASSIFIER_DEVICE)
+        pipeline.to(device)
+ 
+        model_loading_emssion: float =  tracker.stop()
+        
+        if not submit_button:
+            # print(submit_button)
+            st.stop()
+
+        tracker.start()
+        
+        st.subheader("Output", anchor=None)
+        start_time = time.time()
+        
+        
+        for ii in range(0, number_of_image, BATCH_SIZE):
+            # TODO set different seed 
+            num_images_per_prompt = min(BATCH_SIZE, number_of_image - ii)
+            result = pipeline(text_prompt, num_inference_steps=num_inference_steps, cross_attention_kwargs={"scale": 0.8}, 
+                                guidance_scale=guidance_scale, height=height, width=width, num_images_per_prompt=num_images_per_prompt, 
+                                negative_prompt=negative_prompt).images
+        
+            list_img_gen.extend(result)
+            
+            # predict class
+            res_tensor = torch.cat([trans(img).unsqueeze(0) for img in result], dim=0)
+            output = classifier(res_tensor.to(CLASSIFIER_DEVICE))
+            _, list_cls_idx = torch.max(output, dim=1)
+            
+            list_pred_gen.extend(list_cls_idx)
+
+            del res_tensor
+            del output
+            torch.cuda.empty_cache()
+            gc.collect()
+
+            list_pred_gen = [int(pred) for pred in list_pred_gen]
+            list_gt = [CLASSES_LIST.index(class_choice)] * number_of_image
+            positive_sample = len(list((Counter(list_pred_gen) & Counter(list_gt)).elements()))
+        
+
+        infer_emssion: float = tracker.stop()
+        st.text(f"Running time: {time.time()- start_time:.2f}s")
+        st.text(f"True Predict: {positive_sample}, Negative Predict: {number_of_image - positive_sample}, Accuracy: {int(positive_sample/number_of_image * 100)}%")
+        if cal_fid:
+            # cal fid 
+            folder_gt = f'{FOLDER_GT}/{CLASS2NAME[CLASS_STYLEGAN_LIST.index(class_choice)]}'
+            true_dataset = TrueDataset(folder_gt)
+            fake_dataset = TrueDataset(folder_save)
+            fid = fid_score(true_dataset, fake_dataset, device)
+            st.text(f"FID_SCORE: {fid:.2f}")
+        else:
+            fid = None
+
+        if write_file:
+            df = pd.DataFrame({
+                "True Predict": positive_sample,
+                "Negative Predict": number_of_image - positive_sample,
+                "Accuracy": positive_sample/number_of_image,
+                "FID": fid,
+                'Emission': infer_emssion,
+            }).to_csv(f"{folder_save}/result.csv")
+
+        
+        st.text(f"Emission from loading: {model_loading_emssion:.8f}, Emission from inference: {infer_emssion:.4f}")
+        
+       
+        display(list_image=list_img_gen, list_predict=list_pred_gen)
+        
+            
+    elif "StyleGan" in model_choice:
+        with st.expander("Show params"):
+            seed = st.slider(
+                "seed",
+                min_value=0,
+                max_value=100,
+                value=10,
+                step=1,
+                label_visibility="visible",
+                help="seed",
+            )
+            truncation_psi = st.slider(
+                "truncation_psi",
+                min_value=0,
+                max_value=5,
+                value=1,
+                step=1,
+                label_visibility="visible",
+                help="seed",
+            )
+            noise_mode = st.selectbox(
+                "Choose type of noise",
+                ('const', 'random', 'none'),
+            )
+            device = torch.device('cuda:0')
+            
+            tracker.start()
+            G = load_gan()
+            classifier.to(device)
+            model_loading_emssion: float =  tracker.stop()
+        
+        submit_button = st.button("Generate", help=None, args=None, kwargs=None)
+        my_bar = st.progress(0)
+        if not submit_button:
+            st.stop()
+        
+        
+        if write_file:
+            folder_save = f'results/{model_choice}/{CLASS2NAME[CLASS_STYLEGAN_LIST.index(class_choice)]}_{number_of_image}_seed'
+            os.makedirs(folder_save, exist_ok=True)
+
+    
+        st.subheader("Output", anchor=None)
+        start_time = time.time()
+
+        tracker.start()
+        # ===gen_image========
+        for ii in range(0, number_of_image, BATCH_SIZE_STYLEGAN2):
+            label = torch.zeros([BATCH_SIZE_STYLEGAN2, G.c_dim], device=device)
+            label[:, CLASS_STYLEGAN_LIST.index(class_choice)] = 1
+            z = torch.from_numpy(np.random.RandomState( + ii).randn(BATCH_SIZE_STYLEGAN2, G.z_dim)).to(device)
+            img = G(z, label, truncation_psi=1, noise_mode=noise_mode)
+            img_show = (img.clone().permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+            img_show = np.array(img_show.cpu())
+            img_show = [PIL.Image.fromarray(im) for im in img_show]
+        #====================
+            list_img_gen.extend(img_show)
+            img = torch.nn.functional.interpolate(img, size=299)
+            output = classifier(img)
+            conf, cls_idx = torch.max(output, dim=1)
+            list_pred_gen.extend(cls_idx)
+            torch.cuda.empty_cache()
+        
+        list_pred_gen = [int(pred) for pred in list_pred_gen]
+        list_gt = [CLASSES_LIST.index(class_choice)] * number_of_image
+        positive_sample = len(list((Counter(list_pred_gen) & Counter(list_gt)).elements()))
+        infer_emssion: float = tracker.stop()
+        
+        st.text(f"Running time: {time.time()- start_time:.2f}s")
+        st.text(f"True Predict: {positive_sample}, Negative Predict: {number_of_image - positive_sample}, Accuracy: {int(positive_sample/number_of_image * 100)}%")
+        st.text(f"Emission from loading: {model_loading_emssion* 1e8:.2f} * 10^-8 Wh, Emission from inference: {infer_emssion * 1e4:.4f} * 10^-4 Wh")
+        display(list_image=list_img_gen, list_predict=list_pred_gen)
