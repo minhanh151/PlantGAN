@@ -9,3 +9,4 @@ stylegan2/plantvillage*
 stylegan2/PlantVillage_imgsz64
 __pycache__/
 weights/
+results/vae
