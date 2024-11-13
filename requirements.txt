@@ -1,4 +1,5 @@
-torch>=1.4.0
+# accelerate>=0.16.0
+torch
 torchvision>=0.5.0
 dominate>=2.4.0
 visdom>=0.1.8.8
@@ -8,5 +9,19 @@ scipy>=1.5.0
 scikit_image>=0.17.2
 numpy>=1.18.0
 Pillow>=5.4.0
-skimage>=0.16.1
-torchmetric>=1.4.0
+# skimage>=0.16.1
+torchmetrics[image]
+
+transformers>=4.25.1
+datasets>=2.19.1
+ftfy
+tensorboard
+Jinja2
+peft==0.7.0
+
+imageio-ffmpeg 
+pyspng
+diffusers[torch]
+streamlit
+https://github.com/podgorskiy/dnnlib/releases/download/0.0.1/dnnlib-0.0.1-py3-none-any.whl
+codecarbon

@@ -112,7 +112,7 @@ CLASS2NAME = [
 @st.cache_resource()
 def load_classfier():
     num_classes = len(CLASSES_LIST)
-    model_ft = models.inception_v3(pretrained=True)
+    model_ft = models.inception_v3(pretrained=False)
     # Handle the auxilary net
     num_ftrs = model_ft.AuxLogits.fc.in_features
     model_ft.AuxLogits.fc = nn.Linear(num_ftrs, num_classes)
