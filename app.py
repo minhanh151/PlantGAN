@@ -120,7 +120,7 @@ def load_classfier():
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Linear(num_ftrs,num_classes)
 
-    state_dict = torch.load("inceptionv3_classifier.pt")
+    state_dict = torch.load("weights/inceptionv3_classifier.pt")
     model_ft.load_state_dict(state_dict)
     model_ft.eval()
     return model_ft
