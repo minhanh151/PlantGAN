@@ -1,0 +1,12 @@
+checkpoints/plantvillage_cgan/*.pkl
+results/gen_cgan/*
+results/*
+diffusers/
+!diffuser/examples/text_to_image/train_text_to_image_lora.py
+!./diffusers/examples/controlnet/*.py
+stylegan2/results
+stylegan2/plantvillage*
+stylegan2/PlantVillage_imgsz64
+__pycache__/
+weights/
+results/vae
