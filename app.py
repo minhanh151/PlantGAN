@@ -29,7 +29,7 @@ import cv2
 CLASSIFIER_DEVICE=torch.device('cuda:0')
 BATCH_SIZE = 40
 BATCH_SIZE_STYLEGAN2 = 20
-FOLDER_GT = "/data/PlantVillage/val"
+FOLDER_GT = "./datasets/PlantVillage/val"
 MODEL_LIST = ["StyleGan2",
             "StableDiffusion + LORA", 
             "StableDiffusion + LORA + Perceptual Loss", 

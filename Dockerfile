@@ -17,7 +17,7 @@ ENV PYTHONUNBUFFERED=1
 # RUN pip install streamlit
 
 WORKDIR /workspace
-COPY requirements.txt ./
+COPY . . 
 RUN pip install -r requirements.txt
 # RUN pip install https://github.com/podgorskiy/dnnlib/releases/download/0.0.1/dnnlib-0.0.1-py3-none-any.whl
 # RUN pip install codecarbon
