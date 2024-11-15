@@ -1,57 +1,48 @@
-## PlantGAN &mdash; Official Pytorch Implementation
+## PlantGAN &mdash; Official Pytorch 
 
-![Teaser image](media/Teaser.png)
+## Implementation
+### Normal Installation (Not Recommended)
+``` bash
+pip install -r requirements.txt
+```
+Change the model weigth path in the file to the following
 
-**PlantGAN: An Data Augmentation Method for Practical Plant Disease Diagnosis**<br>
+`/workspace/PlantGAN/` to  `./` 
+
+For example:
+`/workspace/PlantGAN/diffusers/examples/text_to_image/plantVillage_text2image_/checkpoint-2500`
 
 
-Abstract: *Many applications for the automated diagnosis of plant disease have been developed based on the success of deep learning techniques. However, these applications often suffer from overﬁtting, and the diagnostic performance is drastically decreased when used on test datasets from new environments. In this Github, we propose different generative AI methods (Conditional GAN, image-to-image translation models, VAEs, and Diffusion models) which generate a wide variety of diseased images via transformation from healthy images, as a data augmentation tool for improving the performance of plant disease diagnosis.*
+### Docker 
+To build image
+```
+docker build . -t streamlit_env
+docker run -td --name streamlit_fid --shm-size 16Gb --network host --gpus all --entrypoint /bin/bash streamlit_env
+```
+
+### Streamlit
+To run streamlit, demo
+```
+CUDA_VISIBLE_DEVICES=0,1,2,3 streamlit run app.py
+```
+
 
 
 ## Datasets
-- Normal dataset: A normal dataset will have 4 directories for two domains A (trainA, testA) and B (trainB, testB). Each directory must contain only images (no other file types).
-An example of the dataset named `healthy2brownspot`
-```bash
-/path/to/healthy2brownspot/trainA
-/path/to/healthy2brownspot/testA
-/path/to/healthy2brownspot/trainB
-/path/to/healthy2brownspot/testB
-```
-- Masked dataset: This dataset is normal dataset + pre-generated mask images. First, you need to generate your own mask images using the [prepare_mask.py]. An example of the masked dataset named `healthy2brownspot_mask`
-```bashf
-/path/to/healthy2brownspot/trainA
-/path/to/healthy2brownspot/trainA_mask # mask images of trainA
-/path/to/healthy2brownspot/testA
-/path/to/healthy2brownspot/trainB
-/path/to/healthy2brownspot/trainB_mask # mask images of trainB
-/path/to/healthy2brownspot/testB
-```
-## cycleGAN/CycleGAN train/test
-- Make sure to prepare the dataset first
-- Train a model (example with the dataset `healthy2brownspot`):s
-```bash
-python train.py --dataroot /path/to/healthy2brownspot --name healthy2brownspot_cycleGAN --model cycle_gan
-```
-- Train model with mask images (example with the dataset `healthy2brownspot_mask`):
-```bash
-python train.py --dataroot /path/to/healthy2brownspot --name healthy2brownspot_cycleGAN --model cycle_gan --dataset_mode unaligned_masked
-```
-To see more intermediate results, check out `./checkpoints/healthy2brownspot_cycleGAN/web/index.html`.
-- Test the model:
-```bash
-python test.py --dataroot /path/to/healthy2brownspot --name healthy2brownspot_cycleGAN --model cycle_gan
-```
-- The test results will be saved to a html file here: `./results/healthy2brownspot_cycleGAN/latest_test/index.html`.
+We use `PlantVillage` dataset in `datasets/PlantVillage`
 
-## Citation
+## Models
+1. Stable Diffusion 
++ train with LORA: `diffusers/examples/text_to_image/plantVillage_text2image_/checkpoint-2500/`
++ train with LORA + perceptual loss: `diffusers/examples/text_to_image/plantVillage_text2image_lpips_l1
+/checkpoint-2500/`
++ train with LORA + perceptual loss + loss mse on the latent space: `examples/text_to_image
+/plantVillage_text2image_lpips_l1_lr1e-5_l2_2000`
++ train with LORA + perceptual loss + loss mse on the latent space + loss mse on the pixel level:  `/diffusers/examples/text_to_image/plantVillage_text2image_lpips_l1_lr1e-5_l2_2000
+/checkpoint-2500/`
 
-```
-@article{cap2020leafGAN,
-  title   = {PlantGAN: An Effective Data Augmentation Method for Practical Plant Disease Diagnosis},
-  year    = {2024}
-}
-```
+2. StyleGAN2: `stylegan2/plantvillage/00005-PlantVillage-cond-auto4
+/network-snapshot-023788.pkl`
 
-## Acknowledgments
-Our code is inspired by [pytorch-CycleGAN](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) and [pytorch-LeafGAN].
+3. We also retrain inceptionv3 model on the `PlantVillage` dataset to calculate FID: `weights/inceptionv3_classifier.pt`
 
