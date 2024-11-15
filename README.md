@@ -10,7 +10,7 @@ Change the model weigth path in the file to the following
 `/workspace/PlantGAN/` to  `./` 
 
 For example:
-`/workspace/PlantGAN/diffusers/examples/text_to_image/plantVillage_text2image_/checkpoint-2500`
+`/workspace/PlantGAN/diffusers/examples/text_to_image/plantVillage_text2image_/checkpoint-2500` to `./diffusers/examples/text_to_image/plantVillage_text2image_/checkpoint-2500`
 
 
 ### Docker 
@@ -21,7 +21,7 @@ docker run -td --name streamlit_fid --shm-size 16Gb --network host --gpus all --
 ```
 
 ### Streamlit
-To run streamlit, demo
+To run streamlit, require gpu to be at least 25 VRAM 
 ```
 CUDA_VISIBLE_DEVICES=0,1,2,3 streamlit run app.py
 ```
@@ -46,3 +46,11 @@ We use `PlantVillage` dataset in `datasets/PlantVillage`
 
 3. We also retrain inceptionv3 model on the `PlantVillage` dataset to calculate FID: `weights/inceptionv3_classifier.pt`
 
+
+
+## Training
+We train 4 cards 2048 for 3 hours training Stable Diffusion with LORA
+Instruction on training diffusion in `diffuser/examples/text_to_image/`
+
+We train StyleGAN for 48h on 4 card 2048
+Instruction on traininig LORA can find in `stylegan`

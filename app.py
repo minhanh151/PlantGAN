@@ -289,13 +289,13 @@ if __name__ =='__main__':
             device = torch.device('cuda:0')
         elif MODEL_LIST.index(model_choice) == 2:
             pipeline = load_model('/workspace/PlantGAN/diffusers/examples/text_to_image/plantVillage_text2image_perceptual_loss/checkpoint-2500')
-            device = torch.device('cuda:1')
+            device = torch.device('cuda:0')
         elif MODEL_LIST.index(model_choice) == 3:
             pipeline = load_model('/workspace/PlantGAN/diffusers/examples/text_to_image/plantVillage_text2image_lpips_l1/checkpoint-2500')
-            device = torch.device('cuda:2')
+            device = torch.device('cuda:0')
         else:
             pipeline = load_model('/workspace/PlantGAN/diffusers/examples/text_to_image/plantVillage_text2image_lpips_l1_lr1e-5_l2_2000/checkpoint-2500')
-            device = torch.device('cuda:3')
+            device = torch.device('cuda:0')
         
         text_prompt = PROMPT[CLASSES_LIST.index(class_choice)]
         classifier.to(CLASSIFIER_DEVICE)
